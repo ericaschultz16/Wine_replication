@@ -1,0 +1,791 @@
+---
+title: "Replication of *Do Expert Reviews Affect the Demand for Wine?*"
+author: "Erica Schultz"
+date: "12/1/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Preface
+In this markdown, I present my replication of *Do Expert Reviews Affect the Demand for Wine?* by Richard Friberg and Erik Grönqvist. The original paper can be found [here] (https://www.aeaweb.org/articles?id=10.1257/app.4.1.193). The authors have published their Stata .do files and their data set [here] (https://www.openicpsr.org/openicpsr/project/113808/version/V1/view). This replication project was for my Empirical Methods class in the Economics department at the University of Pittsburgh.
+
+I explain the motivation, data collection, empirical strategy, and results that the authors employ in their own paper. Using their published data, I present my rendition of the results. Most of the figures and tables are replications of those published in the original paper and appendix with some visual improvements. My results are very close to the estimates found by the authors minus a couple of discrepancies which I describe. 
+
+## Introduction
+Wine is a curious good in that it is difficult to know whether or not you will like the wine until you buy it and taste it for yourself. It is similar to a movie or a book in that you might get some clues from the packaging or the marketing, but unless you’ve tried it, it is hard to know. Additionally, there are an overwhelming number of brands and varieties of wine available to the average consumer. With such a large choice set, if the consumer wants to try something new, it is very difficult to know what to choose. These effects together makes it hard for any brand of wine to distinguish themselves from the crowd and boost sales. Wine brands can signal their product’s taste or quality to the consumer to help guide them towards an informed choice. For example, some wines put cues on the label to describe the taste (e.g., fruity or citrusy, sweet or dry, etc.) and many use advertising or promotional displays. These give cues to the consumer about the quality of the product in hopes to promote sales. As reasonable as this is, the consumer knows that it is in the brand’s interest to exaggerate the quality of their wine to increase sales. Thus, they might be less trusting of the brand’s signal. On the other hand, if the consumer receives a signal about the quality of the product from a third party without an incentive to sell the product, they might be more willing to listen to this signal. In this market, a wine expert’s review of a particular wine is a signal of quality/taste from an agent who does not benefit from their proposed signal. Moreover, the agent, here the wine expert, has an incentive to give a truthful signal to uphold his reputation as being objective. Therefore, the consumer is more likely to listen to the signals received from the wine expert and adjust their consumption choices between brands. 
+
+This kind of effect has been found in other markets for similar “experience goods” as well (Nelson 1970). Friberg and Grönqvist cite other studies finding increased sales rank for books from Amazon and Barnes and Noble with additional favorable customer reviews (Chevalier and Mayzlin(2006)) and increased demand for the most popular dishes in a restaurant (Cai, Chen, and Fang (2009)) though these study third party signals from non-expert reviews. In contrast, we expect that expert reviews to be higher quality signals or a more precise estimate of quality than a novice reviewer. The authors cite Hilger, Rafert, and Villas-Boas (2011) who experiment with wine reviews posted right on the shelf and find increased sales for wines having good reviews. They also cite Berger, Sorensen, and Rasmussen (2010) who empirically find increased sales for books after having a good review in the *New York Times*. This analysis on expert reviews for wine reinforce these findings that expert reviews are influential on demand since they are a signal of quality or probability of enjoyment by a third-party agent with the incentive to give truthful signals.
+
+## Data
+
+##### Importing Libraries and Loading the Data
+```{r Importing Libraries, message=FALSE}
+library(tidyverse)
+library(stargazer)
+library(lubridate)
+library(haven)
+library(lfe)
+library(ggplot2)
+library(data.table)
+library(kableExtra)
+library(formattable)
+library(ggpubr)
+library(data.table)
+
+setwd("~/Desktop/My_Projects/Wine_replication")
+mydata <- read_dta("../DATA/wine/friberg_gronqvist_wine_data.dta")
+temp_data <- read_dta("../DATA/wine/temp_desc.dta")
+
+```
+
+##### Preparing the Data
+```{r Loading the data}
+mydata <- mydata%>%
+  rename(wine_ID = artikelnr, brand_ID = artikelid)%>%
+  arrange(wine_ID, period)
+
+
+for (i in 0:25){
+  mydata[[paste0("rev_all_l_", i)]] <- lag(mydata$rev_all, i)
+  mydata[[paste0("rev_all_lo_l_", i)]] <- lag(mydata$rev_all_lo, i)
+  mydata[[paste0("rev_all_hi_l_", i)]] <- lag(mydata$rev_all_hi, i)
+  
+  mydata[[paste0("ma_split_l_", i)]] <- lag(mydata$ma_split, i)
+  
+  mydata[[paste0("rev_ex_l_", i)]] <- lag(mydata$rev_ex, i)
+  mydata[[paste0("rev_ex_lo_l_", i)]] <- lag(mydata$rev_ex_lo, i)
+  mydata[[paste0("rev_ex_hi_l_", i)]] <- lag(mydata$rev_ex_hi, i)
+  
+  mydata[[paste0("rev_nyaom_l_", i)]] <- lag(mydata$rev_nyaom, i)
+  mydata[[paste0("rev_nyaom_lo_l_", i)]] <- lag(mydata$rev_nyaom_lo, i)
+  mydata[[paste0("rev_nyaom_hi_l_", i)]] <- lag(mydata$rev_nyaom_hi, i)
+}
+
+for (i in 1:4){
+  mydata[[paste0("rev_all_f_", i)]] <- lead(mydata$rev_all, i)
+  mydata[[paste0("rev_all_lo_f_", i)]] <- lead(mydata$rev_all_lo, i)
+  mydata[[paste0("rev_all_hi_f_", i)]] <- lead(mydata$rev_all_hi, i)
+  
+  mydata[[paste0("ma_split_f_", i)]] <- lead(mydata$ma_split, i)
+  
+  mydata[[paste0("rev_ex_f_", i)]] <- lead(mydata$rev_ex, i)
+  mydata[[paste0("rev_ex_lo_f_", i)]] <- lead(mydata$rev_ex_lo, i)
+  mydata[[paste0("rev_ex_hi_f_", i)]] <- lead(mydata$rev_ex_hi, i)
+  
+  mydata[[paste0("rev_nyaom_f_", i)]] <- lead(mydata$rev_nyaom, i)
+  mydata[[paste0("rev_nyaom_lo_f_", i)]] <- lead(mydata$rev_nyaom_lo, i)
+  mydata[[paste0("rev_nyaom_hi_f_", i)]] <- lead(mydata$rev_nyaom_hi, i)
+}
+
+wine_data <- mydata
+rm(mydata)
+
+setwd("~/Desktop/My_Projects/Wine_replication")
+
+
+```
+
+The authors collect data on sales between January 2002 and January 2007 from a wine retailer in Sweden, Systembolaget. Though the Swedish wine market is not inherently interesting broadly, there are several features that make it particularly helpful for determining causal inference. This retailer is a state-owned monopoly and is not a profit maximizing firm. The retailer’s objective is to promote responsible alcohol consumption and so they do not engage in any behavior to promote sales (e.g., advertising, store layout, shelf displays, etc.). The store employees may answer questions but are told not to influence sales. Moreover, the store does not display any customer or expert reviews as that might influence sales. The Swedish Parliament is responsible for assigning the price mark-up for Systembolaget to use on all wines and so retail prices are indirectly determined by the wholesaler. While the wholesaler is profit maximizing, it is unlikely that they will try to respond to local demand shocks since the price mark up is constant throughout the whole country. Therefore, wine prices remain pretty stable, which we can see in Figure 1. Less than 2% of wines in the 5-year sample have more than three changes in price. Therefore, since the retailer is not profit maximizing and prices are stable, we can assume that changes in demand are in not response to a marketing campaign, a price adjustment, a display of a review next to the bottle on the shelf or other sales techniques we might otherwise expect to influence the results.
+
+##### Figure 1
+```{r Figure 1, message=FALSE, warning=FALSE}
+
+fig1_data <- temp_data%>%
+  rename(wine_ID = artikelnr, brand_ID = artikelid)%>%
+  arrange(wine_ID, period)
+
+fig1_data$pchange <- NA
+fig1_data$pchange<- ifelse(!is.na(fig1_data$price) & !is.na(lag(fig1_data$price)), fig1_data$price - lag(fig1_data$price), 0)
+fig1_data$pchange[fig1_data$wine_ID != lag(fig1_data$wine_ID)] <- NA
+
+fig1_data$pdum <- 0
+fig1_data$pdum[fig1_data$pchange != 0] <- 1
+fig1_data$pdum[is.na(fig1_data$pchange)] <- 0
+
+fig1_data <- fig1_data%>%
+  group_by(wine_ID)%>%
+  mutate(nrpchange = sum(pdum))
+
+# ggplot(fig1_data%>%filter(ind == 1))+
+#   geom_histogram(aes(x = nrpchange, y = ..density..), binwidth = 1, fill = "grey", color = "black")
+
+fig1 <- ggplot(fig1_data%>%filter(ind == 1), aes(x = nrpchange))+
+  theme_minimal()+
+  geom_histogram(aes(y = ..density..), binwidth = 1, fill = "#99004C", color = "black")+
+  stat_bin(geom = "text", aes(label = round(..density.., 3), y = ..density..), vjust = -1, binwidth = 1)+
+  ylim(0,.35)+
+  scale_x_continuous(breaks = 0:7)+
+  labs(x = "Number of price changes", y = "Share of wines")+
+  ggtitle("Figure 1 - Number of Price Changes per Wine")
+ggsave("Fig1_.png", plot = fig1, width = 8, height = 5)
+fig1
+```
+
+The data set encompasses all red, white, and sparkling wines sold in 750 mL bottles or three-liter bag-in-box packages in at least 77% of the 420 stores in Sweden. The data is organized by each specific wine sold in a particular week. A particular wine is defined by it’s brand, wine variety, container size, and any other specialty indicator (e.g. vintage, “Reserva”, etc.) For instance, Barefoot Pinot Grigio in a 750 mL bottle is classified as a different wine from Barefoot Pinot Grigio in a 3 L box, though they share the same brand. The summary statistics for the wines in this sample are presented in Table 1
+
+##### Table 1
+```{r Table 1, message=FALSE, warning=FALSE}
+#preparing data set for the summary stats
+summary_df <- temp_data%>%
+  rename(wine_ID = artikelnr, brand_ID = artikelid)%>%
+  arrange(wine_ID, period)
+
+summary_df$maind <- 0
+summary_df$maind[summary_df$ma_split > 0 & !is.na(summary_df$ma_split)] <- 1 #indicator if advertising was positive
+
+summary_df <- summary_df%>%
+  group_by(wine_ID)%>%
+  mutate(masplit_m = mean(ma_split*maind, na.rm = TRUE)) #mean advertising expendatures during weeks the wine is distributed
+
+summary_df$masplit_m[summary_df$masplit_m == 0] <- NA #making mean = NA if was equal to 0
+
+summary_df$indcross <- 0
+summary_df$wine_id_lag <- lag(summary_df$wine_ID)
+summary_df$indcross[summary_df$wine_ID != summary_df$wine_id_lag] <- 1
+
+summary_df <- summary_df%>%
+  arrange(wine_ID, period)%>%
+  group_by(wine_ID)%>%
+  mutate(dpri_m = mean(rprice_litre, na.rm = TRUE), dlitre_m = mean(litre, na.rm = TRUE)) #mean real liter price during weeks the wine is distributed and mean liters sold during weeks the wine is distributed
+
+table1.1 <- summary_df%>%
+  filter(indcross == 1)%>%
+  group_by(segm)%>%
+  summarise(across(.cols = c(dlitre_m, dpri_m), .fns = list(mean, sd, min, median, max, n_distinct)))
+
+table1.2 <- summary_df%>%
+  filter(indcross == 1)%>%
+  group_by(segm)%>% 
+  filter(!is.na(masplit_m))%>%
+  summarise(across(.cols = c(masplit_m), .fns = list(mean, sd, min, median, max, n_distinct)))
+
+table1 <- cbind(table1.1, table1.2)
+
+table1.3 <- summary_df%>%
+  ungroup()%>%
+  filter(indcross == 1)%>%
+  summarise(across(.cols = c(dlitre_m, dpri_m), .fns = list(mean, sd, min, median, max, n_distinct)))
+table1.3 <- cbind(segm = "total", table1.3)
+
+table1.4 <- summary_df%>%
+  ungroup()%>%
+  filter(indcross == 1)%>%
+  filter(!is.na(masplit_m))%>%
+  summarise(across(.cols = c(masplit_m), .fns = list(mean, sd, min, median, max, n_distinct)))
+table1.4 <- cbind(segm = "total", table1.4)
+
+
+table1 <- rbind(table1, cbind(table1.3, table1.4))
+rm(table1.1, table1.2, table1.3, table1.4, summary_df)
+
+segment <- c("Red", "Red", "Red", "White", "White", "White", "Sparkling", "Sparkling", "Sparkling", "Total", "Total", "Total")
+variable <- c("Liters per week", "Price per liter", "Advertising expenditure")
+new_table1 <- as.data.frame(cbind(segment, variable))
+new_table1$mean <- 0
+new_table1$sd <- 0
+new_table1$min <-0
+new_table1$median <- 0
+new_table1$max <- 0
+new_table1$obs <- 0
+new_table1$mean[new_table1$variable == "Liters per week"] <- table1$dlitre_m_1
+new_table1$sd[new_table1$variable == "Liters per week"] <- table1$dlitre_m_2
+new_table1$min[new_table1$variable == "Liters per week"] <- table1$dlitre_m_3
+new_table1$median[new_table1$variable == "Liters per week"] <- table1$dlitre_m_4
+new_table1$max[new_table1$variable == "Liters per week"] <- table1$dlitre_m_5
+new_table1$obs[new_table1$variable == "Liters per week"] <- table1$dlitre_m_6
+
+new_table1$mean[new_table1$variable == "Price per liter"] <- table1$dpri_m_1
+new_table1$sd[new_table1$variable == "Price per liter"] <- table1$dpri_m_2
+new_table1$min[new_table1$variable == "Price per liter"] <- table1$dpri_m_3
+new_table1$median[new_table1$variable == "Price per liter"] <- table1$dpri_m_4
+new_table1$max[new_table1$variable == "Price per liter"] <- table1$dpri_m_5
+new_table1$obs[new_table1$variable == "Price per liter"] <- table1$dpri_m_6
+
+new_table1$mean[new_table1$variable == "Advertising expenditure"] <- table1$masplit_m_1
+new_table1$sd[new_table1$variable == "Advertising expenditure"] <- table1$masplit_m_2
+new_table1$min[new_table1$variable == "Advertising expenditure"] <- table1$masplit_m_3
+new_table1$median[new_table1$variable == "Advertising expenditure"] <- table1$masplit_m_4
+new_table1$max[new_table1$variable == "Advertising expenditure"] <- table1$masplit_m_5
+new_table1$obs[new_table1$variable == "Advertising expenditure"] <- table1$masplit_m_6
+
+#new_table1 <- as.data.table(new_table1)
+
+new_table1 <- new_table1%>%
+  mutate_at(vars(mean, sd, min, median, max), list(~ round(.,2)))
+
+k_table1<- kbl(new_table1[,2:8], format = "html", col.names = c("", "Mean", "SD", "Min", "Median", "Max", "Observations"), caption = "Table 1 - Descriptive Statistics across Wines")%>%
+  kable_classic_2(full_width = F)%>%
+  pack_rows("Red wines", 1,3, color = "#99004C", bold = T)%>%
+  pack_rows("White wines", 4,6, color = "#EEC600", bold = T)%>%
+  pack_rows("Sparkling wines", 7,9, color = "#CC0066", bold = T)%>%
+  pack_rows("All wines", 10,12, bold = T)%>%
+  row_spec(0, bold = T)
+
+k_table1
+```
+
+Data for reviews was obtained from six major print media in Sweden. These media are targeted to the general consumer (as opposed to wine enthusiasts) and are deemed by Friberg and Grönqvist to be the most influential reviews at the time of the sample. Each of the six media publish a numerical grade to signify a “good buy” in the sense of quality and price. To normalize all the reviews, the authors convert all grades into a 0-10 scale. If there are multiple reviews for the same wine in a given week, the authors use a circulation-weighted average of the grades, though this is rare in the data. After these transformations, the authors have a continuous measure of the quality as a numerical representation of the review. Table 2 gives descriptive statistics for the normalized reviews in each of the media as well as the distribution of "good" grades (having a grade $\geq$ 8) and "bad" grades (having a grade $\leq$ 4). 
+
+I do not have data on the reviews prior to these transformations. What would be interesting is to see if there is differential demand in the level of the rating. For instance, some websites give reviews in integer scales (4 out of 5 stars) as opposed to continuous scales (4.2 out of 5 stars). One potential extension could be to assess whether the  increase from 4 to 5 stars has a different effect on sales than an increase from 3 to 4 stars. It might also be interesting to see if ratings just below focal levels in ratings are underestimated. Left-digit bias has been studied extensively in prices and consumer behavior. Lacetera (2011) find that cars with odometer readings just below certain mileage thresholds are sold at higher prices than those not. Further research could be done on how ratings just below whole numbers might be over or underinflated by left-digit bias.
+
+
+
+##### Table 2
+```{r Table 2, message=FALSE, warning=FALSE}
+
+df.sum <- temp_data%>%
+  drop_na(v10_all)%>%
+  select(v10_a, v10_dn, v10_di, v10_exp, v10_svd, v10_aom)%>%
+  psych::describe()%>%
+  as_tibble(rownames = "rowname")
+
+table2.1 <- df.sum%>%
+  select(var = rowname, mean, sd, min, median, max, n)
+
+df.sum2 <- temp_data%>%
+  drop_na(v10_all)%>%
+  mutate(v10_all_hi = ifelse((v10_all > 7.999), v10_all, NA))%>%
+  mutate(v10_all_lo = ifelse((v10_all <= 4), v10_all, NA))%>%
+  select(v10_all, v10_all_hi, v10_all_lo)%>%
+  psych::describe()%>%
+  as_tibble(rownames = "rowname")
+
+table2.2 <- df.sum2%>%
+  select(var = rowname, mean, sd, min, median, max, n)
+
+table2 <- rbind(table2.1, table2.2)
+rm(table2.1, table2.2, df.sum, df.sum2)
+media <- c("Aftonbladet", "Dagens Nyheter", "Dagens Industri", "Expressen", "Scenska Dagbladet", "Allt om Mat", "Grade", "Grade|Grade ≥ 8", "Grade|Grade ≤ 4")
+table2 <- cbind(media, table2[,2:7])
+table2 <- table2%>%
+  mutate_at(vars(mean, sd, min, median, max), list(~ digits(.,2)))
+
+
+table2[1:6, 1]<- cell_spec(table2[1:6, 1], italic = T)
+
+k_table2 <- kbl(table2, col.names = c("Media", "Mean", "SD", "Min", "Median", "Max", "Observations"), caption = "Table 2 - Wine Reviews in Swedish Print Media", escape = F)%>%
+  kable_classic_2(full_width = F)%>%
+  row_spec(0, bold = T)
+  
+k_table2
+```
+
+The number of reviews for wines pretty is stable throughout the sample as shown in Figure 2. Ignoring the large spikes for a moment, there appears to be a relatively constant pattern in the number of reviews per week across the five-year sample. The large spikes are due to a special issue of *Allt om Mat* (*AoM* henceforth) on wine tasting that is published in October every year. Almost every red and white wine in major distribution is reviewed in this yearly issue. Since the occurrence of reviews appears to be stable over time, the authors decide that this is sufficient evidence to say that the timing of the wine reviews is exogenous to sales of any particular wine. 
+
+##### Figure 2
+```{r Figure 2, message=FALSE, warning=FALSE}
+fig2_data <- wine_data%>%
+  ungroup()%>%
+  filter(!is.na(dist) & dist > 4)%>%
+  group_by(period)%>%
+  arrange(period)%>%
+  mutate(nrev = sum(!is.na(v10_all)))%>%
+  ungroup()%>%
+  select(date, period, nrev)
+
+fig2 <- ggplot(fig2_data, aes(x = date, y = nrev))+
+  theme_minimal()+
+  geom_col(position = "identity", color = "#99004C")+
+  scale_x_date(date_labels = "%b %Y" )+
+  labs(x = "Date", y = "Number of wines reviewed per week")+
+  ggtitle("Figure 2 - Number of Wines Reviewed per Week")
+ggsave("Fig2_.png", plot = fig2, width = 7, height = 4)
+fig2
+```
+
+The authors also collect data on weekly advertising expenditures. As mentioned previously, advertising is a way for brands to distinguish themselves and can help guide consumers in a market with such a vast variety of choices. Note, however, that the retailer does not engage in any advertising; the advertising expenditures are by the producer. Additionally, wine advertising in Sweden is tightly regulated and so the authors infer that advertising is more “informative rather than persuasive” in nature (Friberg and Grönqvist, 2012). With this in mind, the authors predict that advertising is not as important (or perhaps they find it less interesting) and include advertising in their analysis simply as a control variable. 
+
+## Empirical Strategy
+
+In this section I will explain the empirical strategy employed by Friberg and Grönqvist. The base estimating equation is defined as follows:
+
+$$\ln Q_{ijkt} = \alpha_j + \delta_{kt} + \sum_{l=-4}^{25}\alpha_{t-l}R_{it-l} + \sum_{l=-4}^{25}\alpha_{t-l}^{good}R_{it-l}^{good} + \sum_{l=-4}^{25}\alpha_{t-l}^{bad}R_{it-l}^{bad} + \sum_{l=-4}^{25}\gamma_{t-l}ADVERT_{it-l} + \eta_{ijkt}$$
+
+To show effects on demand, the outcome variable for all regressions is the natural log of liters sold of a particular wine $i$, having vintage and price combination $j$, in segment $k$ during week $t$. The error term is clustered on the brand level. The first two terms on the right hand side are different types of fixed effects. The authors use $\alpha_j$ to allow for differentiation between the same wine with a different vintage or a different price. Additionally, they include another fixed effect $\delta_{kt}$ to control for time trends for sales in a specific segment. There tends to be a cyclical pattern in sales of wine, as shown in Figure 3, but these patterns are different between different categories of wine. Figure 3 shows a noticeable increase in sales of sparkling wine right before the new year in congruence with New Year’s Eve festivities and similarly white wines are more popular in the hot summer months. The authors note too that price levels have cyclical patterns. To appropriately account for the differential time trends, the authors define the segments such that there is a fixed effect for each week and segment combination. There are four segments each for red and white wines (low price bottles, medium price bottles, high price bottles, boxes) and two segments for sparkling wines (low price bottles and high price bottles).
+
+##### Figure 3
+```{r Figure A1a (3), message=FALSE, warning=FALSE}
+figA1a_data <- temp_data%>%
+  rename(wine_ID = artikelnr, brand_ID = artikelid)%>%
+  arrange(wine_ID, period)
+
+figA1a_data$red <- 0
+figA1a_data$sparkling <- 0
+figA1a_data$white <- 0
+figA1a_data$red <- ifelse(figA1a_data$segm == "red", figA1a_data$litre, 0)
+figA1a_data$sparkling <- ifelse(figA1a_data$segm == "spa", figA1a_data$litre,0)
+figA1a_data$white<- ifelse(figA1a_data$segm == "whi", figA1a_data$litre, 0)
+
+figA1a_data <- figA1a_data%>%
+  ungroup()%>%
+  group_by(period)%>%
+  summarise(red = sum(red), white = sum(white), sparkling = sum(sparkling), date = mean(date))%>%
+  ungroup()%>%
+  mutate(red = red/1000, white = white/1000, sparkling = sparkling/1000)%>%
+  mutate(red_ma = (lag(red) + red + lead(red))/3)%>%
+  mutate(white_ma = (lag(white) + white + lead(white))/3)%>%
+  mutate(spark_ma = (lag(sparkling) + sparkling + lead(sparkling))/3)
+
+
+figA1a <- ggplot(figA1a_data, aes(x = date))+
+  theme_minimal()+
+  scale_x_date(date_labels = "%b %Y" )+
+  geom_line(aes(y = red_ma, color = "Red"), size = .65)+
+  geom_line(aes(y = white_ma, color = "White"), size = .65)+
+  geom_line(aes(y = spark_ma, color = "Sparkling"), linetype = "dashed", size = .75)+
+  scale_color_manual(breaks = c("Red", "White", "Sparkling"), values = c("Red" = "#99004C", "White" = "#EEC600", "Sparkling" = "#CC0066"))+
+  labs(x = "Date", y = "Thousands of Liters Sold", color = "Segment:")+
+  ggtitle("Figure 3 - Liters Sold Over Time by Segment")+
+  theme(legend.position = "bottom")
+ggsave("FigA1a_.png", plot = figA1a, width = 8, height = 5)
+
+figA1a
+
+```
+
+The subsequent three terms are the main variables of interest, the review variables. The first, $R_{it}$ is an indicator variable for whether or not wine $i$ received a review in week $t$. The next two are additional indicators for whether the review received was a good review, the grade being at least 8 out of 10, or a bad review, the grade being no more than 4 out of 10. Since a review might have effects beyond the week of publication, the authors allow the potential for a review to influence demand for up to 25 weeks.
+
+The authors also include a control for advertising expenditures. As discussed with the data, Friberg and Grönqvist include it in the regression to control for their potential effects on demand, but that it is not their variable of interest. Again, the authors allow for advertising effects to last as long as 25 weeks. The authors also mention how that the identification assumption on advertising is not as strong as it is for reviews and therefore its estimated coefficient should be taken as suggestive effects.
+
+One might be concerned that the direction of causality is reversed: that a wine experiencing increasing sales might be more likely to receive a review. To address this, the authors include 4 leads to allow for the effect of a review to influence sales up to four weeks prior to the review. If reviews are in response to increased demand, we would expect the lead coefficients to be positive and significant. The authors also replicate the analysis using only the reviews from the yearly wine-tasting issue in *AoM*. These reviews should be exogenous to any demand shocks since this issue reviews nearly all the major wines in distribution and the date of publication is always in October.
+
+Altogether, given the estimates of vintage $\times$ price fixed effects, time$\times$segment fixed effects, reviews, and advertising expenditures, we expect the error term to have mean zero and the regression to yield unbiased estimates. 
+
+## Results
+
+##### Figure 4
+```{r Figure 3A (4), message=FALSE, warning=FALSE}
+#Making a lists of the lead and lag variables for all the regressions
+###############################################################################
+wine_data <- wine_data%>%
+  arrange(wine_ID, period)
+#lists for all reviews
+varlist_rev_all_l <- paste("rev_all_l", 0:25, sep = "_")
+varlist_rev_all_f <- rev(paste("rev_all_f", 1:4, sep = "_"))
+varlist_rev_all_lo_l <- paste("rev_all_lo_l", 0:25, sep = "_")
+varlist_rev_all_lo_f <- rev(paste("rev_all_lo_f", 1:4, sep = "_"))
+varlist_rev_all_hi_l <- paste("rev_all_hi_l", 0:25, sep = "_")
+varlist_rev_all_hi_f <- rev(paste("rev_all_hi_f", 1:4, sep = "_"))
+
+#lists for advertising expendatures
+varlist_ma_split_l <- paste("ma_split_l", 0:25, sep = "_")
+varlist_ma_split_f <- rev(paste("ma_split_f", 1:4, sep = "_"))
+
+#lists for reviews excluding the AOM
+varlist_rev_ex_l <- paste("rev_ex_l", 0:25, sep = "_")
+varlist_rev_ex_f <- rev(paste("rev_ex_f", 1:4, sep = "_"))
+varlist_rev_ex_lo_l <- paste("rev_ex_lo_l", 0:25, sep = "_")
+varlist_rev_ex_lo_f <- rev(paste("rev_ex_lo_f", 1:4, sep = "_"))
+varlist_rev_ex_hi_l <- paste("rev_ex_hi_l", 0:25, sep = "_")
+varlist_rev_ex_hi_f <- rev(paste("rev_ex_hi_f", 1:4, sep = "_"))
+
+#list of reviews exclusively in the AOM
+varlist_rev_nyaom_l <- paste("rev_nyaom_l", 0:25, sep = "_")
+varlist_rev_nyaom_f <- rev(paste("rev_nyaom_f", 1:4, sep = "_"))
+varlist_rev_nyaom_lo_l <- paste("rev_nyaom_lo_l", 0:25, sep = "_")
+varlist_rev_nyaom_lo_f <- rev(paste("rev_nyaom_lo_f", 1:4, sep = "_"))
+varlist_rev_nyaom_hi_l <- paste("rev_nyaom_hi_l", 0:25, sep = "_")
+varlist_rev_nyaom_hi_f <- rev(paste("rev_nyaom_hi_f", 1:4, sep = "_"))
+
+#List for Plots 1-4 and Interaction regressions
+varlist <- c(varlist_rev_all_f, varlist_rev_all_l,varlist_rev_all_hi_f, varlist_rev_all_hi_l, varlist_rev_all_lo_f, varlist_rev_all_lo_l,varlist_ma_split_f, varlist_ma_split_l)
+
+#list for not AOM plot
+varlist_notAOM <- c(varlist_rev_ex_f, varlist_rev_ex_l, varlist_rev_ex_hi_f, varlist_rev_ex_hi_l, varlist_rev_ex_lo_f, varlist_rev_ex_lo_l, varlist_ma_split_f, varlist_ma_split_l) 
+
+#list for AOM plot
+varlist_AOM <- c(varlist_rev_nyaom_f, varlist_rev_nyaom_l, varlist_rev_nyaom_hi_f, varlist_rev_nyaom_hi_l, varlist_rev_nyaom_lo_f, varlist_rev_nyaom_lo_l, varlist_ma_split_f, varlist_ma_split_l) 
+
+#deleting the old lists
+rm(varlist_rev_all_f, varlist_rev_all_l,varlist_rev_all_hi_f, varlist_rev_all_hi_l, varlist_rev_all_lo_f, varlist_rev_all_lo_l,varlist_ma_split_f, varlist_ma_split_l, varlist_rev_ex_f, varlist_rev_ex_l,varlist_rev_ex_hi_f, varlist_rev_ex_hi_l, varlist_rev_ex_lo_f, varlist_rev_ex_lo_l, varlist_rev_nyaom_f, varlist_rev_nyaom_l,varlist_rev_nyaom_hi_f, varlist_rev_nyaom_hi_l, varlist_rev_nyaom_lo_f, varlist_rev_nyaom_lo_l)
+
+
+
+#Form1 is for plots 1-4, this is the basic regression form
+form1 <- as.formula(paste(paste("llitre ~ ", paste(varlist, collapse= "+")), "|artikpr + time_segm_price|0|brand_ID")) #make the formula using the lists from above
+reg1 <- felm(form1, data = wine_data, subset = (!is.na(dist) & dist > 4 & !is.na(rev_all_f_1) & !is.na(rev_all_f_2) & !is.na(rev_all_f_3) & !is.na(rev_all_f_4)), cmethod = "reghdfe") #do the regression
+
+#collect the betas
+betas <- coef(summary(reg1)) 
+betas <- as.data.frame(betas)
+
+#time vector for the weeks, will correspond to the leads and lag variables
+time_vec <- c(-4:25)
+res <- cbind(betas, time_vec) #column bind the betas with the time vector
+res$moe <- 1.96*res$`Cluster s.e.` #add a column for the SE
+
+names(res) <- c("Estimate", "SE", "t", "p", "week", "MoE")
+
+#labeling the coefficients
+res$outvar[1:30] <- "Review"
+res$outvar[31:60] <- "good"
+res$outvar[61:90] <- "bad"
+res$outvar[91:120] <- "advert"
+
+beta_table <- cbind(res$Estimate[1:30],res$Estimate[31:60],res$Estimate[61:90],res$Estimate[91:120])
+beta_table <- beta_table*100
+beta_table <- cbind(time_vec, beta_table)
+
+
+#plot for Review
+bplt_1 <- ggplot(res%>%filter(outvar == "Review"), aes(x = week, y = Estimate))+
+  geom_vline(xintercept = 0, alpha = 0.5)+
+  geom_hline(yintercept = 0, alpha = 0.5)+
+  theme_minimal()+
+  geom_errorbar(aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .3) +
+  geom_point()+
+  geom_point(data = res%>%filter(outvar == "Review", p < 0.05),color = "#99004C", size = 2 )+
+  geom_errorbar(data = res%>%filter(outvar == "Review", p < 0.05), aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .5, color = "#99004C") +
+  scale_y_continuous(breaks = seq(-0.02, 0.08, 0.02), limits = c(-0.02, 0.08))+
+  scale_x_continuous(breaks = seq(-5, 25, 5), limits = c(-5, 26))+
+  labs(x ="week", y = "log liter")+
+  ggtitle("Reviews")
+#bplt_1
+
+#plot for good review
+bplt_2 <- ggplot(res%>%filter(outvar == "good"), aes(x = week, y = Estimate))+
+  geom_vline(xintercept = 0, alpha = 0.5)+
+  geom_hline(yintercept = 0, alpha = 0.5)+
+  theme_minimal()+
+  geom_errorbar(aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .3) +
+  geom_point()+
+  geom_point(data = res%>%filter(outvar == "good", p < 0.05),color = "#99004C", size = 2 )+
+  geom_errorbar(data = res%>%filter(outvar == "good", p < 0.05), aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .5, color = "#99004C") +
+  scale_y_continuous(breaks = seq(-0.02, 0.08, 0.02), limits = c(-0.02, 0.08))+
+  scale_x_continuous(breaks = seq(-5, 25, 5), limits = c(-5, 26))+
+  labs(x ="week", y = "log liter")+
+  ggtitle("Good Review")
+#bplt_2
+
+#plot for bad review
+bplt_3 <- ggplot(res%>%filter(outvar == "bad"), aes(x = week, y = Estimate))+
+  geom_vline(xintercept = 0, alpha = 0.5)+
+  geom_hline(yintercept = 0, alpha = 0.5)+
+  theme_minimal()+
+  geom_errorbar(aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .3) +
+  geom_point()+
+  geom_point(data = res%>%filter(outvar == "bad", p < 0.05),color = "#99004C", size = 2 )+
+  geom_errorbar(data = res%>%filter(outvar == "bad", p < 0.05), aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .5, color = "#99004C") +
+  scale_y_continuous(breaks = seq(-0.06, 0.08, 0.02), limits = c(-0.05, 0.08))+
+  scale_x_continuous(breaks = seq(-5, 25, 5), limits = c(-5, 26))+
+  labs(x ="week", y = "log liter")+
+  ggtitle("Bad Review")
+#bplt_3
+
+#plot for advertising
+bplt_4 <- ggplot(res%>%filter(outvar == "advert"), aes(x = week, y = Estimate))+
+  geom_vline(xintercept = 0, alpha = 0.5)+
+  geom_hline(yintercept = 0, alpha = 0.5)+
+  theme_minimal()+
+  geom_errorbar(aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .3) +
+  geom_point()+
+  geom_point(data = res%>%filter(outvar == "advert", p < 0.05),color = "#99004C", size = 2 )+
+  geom_errorbar(data = res%>%filter(outvar == "advert", p < 0.05), aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .5, color = "#99004C") +
+  scale_y_continuous(breaks = seq(-0.0002, 0.0008, 0.0002), limits = c(-0.0002, 0.0008), labels = scales::number_format(accuracy = 0.0001))+
+  scale_x_continuous(breaks = seq(-5, 25, 5), limits = c(-5, 26))+
+  labs(x ="week", y = "log liter")+
+  ggtitle("Advertising Expendatures")
+#bplt_4
+
+figure3A <- ggarrange(bplt_1, bplt_2, bplt_3, bplt_4, nrow = 2, ncol = 2)
+ggsave("Fig3A_.png", plot = figure3A, width = 8, height = 6)
+#figure3A
+
+annotate_figure(figure3A, top = text_grob("Figure 4 - Effects on Demand for Wine", face = "bold", just = "right", size = 14))
+
+```
+
+We begin by looking at the estimates on each of the main variables over the 4 weeks leading up to, the week of, and the 25 weeks after a review. Figure 4 presents a graph of each variable’s estimates and 95% confidence intervals over these 30 weeks. Estimates which are statistically significant (p < 0.05) are highlighted. Notice that nearly all the estimates for the leads are indistinguishable from zero and so we can assume that receiving a review is not in response to increasing demand. Note that the figures in the original paper show none of the leads being statistically significant.
+
+First, we examine effects of receiving a review. Regardless of whether the review is favorable or unfavorable, the existence of the review makes the existence of the particular wine more salient to the consumer. In the same week of receiving a review, sales for that wine increase by 2.1 percent and one week after receiving a review, sales increase by 4.3 percent. This positive and significant effect on sales from receiving a review lasts for about 5 weeks. These estimates are about double the magnitude of the estimates from the original paper.
+
+If the existence of a review alone increases the salience of a wine, then the effects of good or bad reviews could be interpreted as the effect on consumers who are changing their consumption in response to the implication of the review, that it is a good or bad wine to buy. If a wine receives a good review, sales in the same week increase by an extra 1.7 percent in addition to the 2.1 percent increase from receiving a review alone. One week after a good review yields an additional 4.1 percent increase in sales on top of the effect of a review alone. In contrast, a bad review decreases sales during the same week by 2.6 percent in addition to the increase from having a review alone. One week after a bad review, sales decrease by 3.5 percent in addition to the increase from having a review alone. It appears that the detrimental effect of receiving a bad review nullifies the beneficial effect of receiving a review at all such that receiving a bad review is equivalent to not receiving a review. The magnitudes of my estimates are different from those in the paper, but the analysis remains the same thus far.
+
+Table 3 shows the estimated full impact on average sales volume and average revenue for neutral, good, and bad reviews. The full estimate effect is calculated by summing their respective, statistically significant estimates (so the effect of a good review is the sum of coefficients for review and good review). This effect applied to mean weekly sales to see the average influence on liters sold and then using the mean price, I show the average influence on revenues in SEK.
+
+The last plot in Figure 4 shows the effect of advertising on sales. This is not the variable of interest, but I present it for completion. We do estimate significantly positive effects from advertising, but they are very small.
+
+##### Table 3
+```{r Table 3: basic outcome table, message=FALSE, warning=FALSE}
+##Full effect of a review, good or bad on demand
+basic_outcome_table <- res%>%
+  filter(outvar != "advert")
+
+basic_outcome_table$g_effect <- NA
+basic_outcome_table$b_effect <- NA
+basic_outcome_table$n_effect <- NA
+basic_outcome_table$g_effect<- ifelse((basic_outcome_table$outvar == "Review"|basic_outcome_table$outvar == "good") & basic_outcome_table$p < 0.05, basic_outcome_table$Estimate, NA)
+basic_outcome_table$b_effect <- ifelse((basic_outcome_table$outvar == "Review"|basic_outcome_table$outvar == "bad") & basic_outcome_table$p < 0.05, basic_outcome_table$Estimate, NA)
+basic_outcome_table$n_effect <- ifelse(basic_outcome_table$outvar == "Review" & basic_outcome_table$p < 0.05, basic_outcome_table$Estimate, NA)
+
+basic_outcome_table <- basic_outcome_table%>%
+  summarise(g_effect = sum(g_effect, na.rm = T), b_effect = sum(b_effect, na.rm = T), n_effect = sum(n_effect, na.rm = T))
+basic_outcome_table$mean_liter <- table1[4,2]
+basic_outcome_table$mean_price <- table1[4,8]
+
+basic_outcome_table2 <- basic_outcome_table%>%
+  mutate(g_liter_effect = g_effect * mean_liter, b_liter_effect = b_effect*mean_liter, n_liter_effect = n_effect*mean_liter)%>%
+  transmute(g_liter_effect, b_liter_effect,n_liter_effect, g_rev_effect = g_liter_effect * mean_price, b_rev_effect = b_liter_effect * mean_price, n_rev_effect = n_liter_effect * mean_price)
+
+
+basic_table <- c(basic_outcome_table[1,1], basic_outcome_table[1,2], basic_outcome_table[1,3])
+basic_table<- as.data.frame(basic_table)
+basic_table <- cbind(basic_table, c(basic_outcome_table2[1,1], basic_outcome_table2[1,2], basic_outcome_table2[1,3]))
+basic_table <- cbind(basic_table, c(basic_outcome_table2[1,4], basic_outcome_table2[1,5], basic_outcome_table2[1,6]))
+basic_table <- cbind(c("Good Review", "Bad Review", "Neutral Review"), basic_table)
+
+k_basictable <- kbl(basic_table, col.names = c("", "Total Effect", "on Liters Sold", "on Revenue"), caption = "Table 3 - Outcomes from Reviews on Sales and Revenue", escape = F)%>%
+  kable_classic_2(full_width = F)%>%
+  row_spec(0, bold = T)
+  
+k_basictable
+
+```
+
+In addition to implementing a 4-week lead on the review and advertising variables, the authors also perform the analysis using good reviews exclusively from the wine-tasting issue of *AoM* and again using good reviews excluding those from the same wine-tasting issue of *AoM*. Estimates and 95% confidence intervals over the 30 weeks around a good review for these two sub samples are shown in Figure 5
+
+##### Figure 5
+```{r Figure 3B (5), fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
+
+#Not AOM - good review
+form2 <- as.formula(paste(paste("llitre ~ ", paste(varlist_notAOM, collapse= "+")), "|artikpr + time_segm_price|0|brand_ID"))
+reg2 <- felm(form2, data = wine_data, subset = (!is.na(dist) & dist > 4 & !is.na(rev_all_f_1) & !is.na(rev_all_f_2) & !is.na(rev_all_f_3) & !is.na(rev_all_f_4)), cmethod = "reghdfe")
+
+betas2 <- coef(summary(reg2))
+betas2 <- as.data.frame(betas2)
+
+res2 <- cbind(betas2, time_vec)
+res2$moe <- 1.96*res2$`Cluster s.e.`
+
+names(res2) <- c("Estimate", "SE", "t", "p", "week", "MoE")
+
+res2$outvar[1:30] <- "Review"
+res2$outvar[31:60] <- "good"
+res2$outvar[61:90] <- "bad"
+res2$outvar[91:120] <- "advert"
+
+
+#plot for good review
+bplt_5 <- ggplot(res2%>%filter(outvar == "good"), aes(x = week, y = Estimate))+
+  geom_vline(xintercept = 0, alpha = 0.5)+
+  geom_hline(yintercept = 0, alpha = 0.5)+
+  theme_minimal()+
+  geom_errorbar(aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .3) +
+  geom_point()+
+  geom_point(data = res2%>%filter(outvar == "good", p < 0.05),color = "#EEC600", size = 2 )+
+  geom_errorbar(data = res2%>%filter(outvar == "good", p < 0.05), aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .5, color = "#EEC600") +
+  scale_y_continuous(breaks = seq(-0.08, 0.1, 0.02), limits = c(-0.08, 0.1))+
+  scale_x_continuous(breaks = seq(-5, 25, 5), limits = c(-5, 26))+
+  labs(x ="week", y = "log liter")+
+  ggtitle("Good Review: Non-AoM yearly test")
+#bplt_5
+
+
+#AOM_good review
+form3 <- as.formula(paste(paste("llitre ~ ", paste(varlist_AOM, collapse= "+")), "|artikpr + time_segm_price|0|brand_ID"))
+reg3 <- felm(form3, data = wine_data, subset = (!is.na(dist) & dist > 4 & !is.na(rev_all_f_1) & !is.na(rev_all_f_2) & !is.na(rev_all_f_3) & !is.na(rev_all_f_4)), cmethod = "reghdfe")
+
+betas3 <- coef(summary(reg3))
+betas3 <- as.data.frame(betas3)
+
+res3 <- cbind(betas3, time_vec)
+res3$moe <- 1.96*res3$`Cluster s.e.`
+
+names(res3) <- c("Estimate", "SE", "t", "p", "week", "MoE")
+
+res3$outvar[1:30] <- "Review"
+res3$outvar[31:60] <- "good"
+res3$outvar[61:90] <- "bad"
+res3$outvar[91:120] <- "advert"
+
+#Plot for good review
+bplt_6 <- ggplot(res3%>%filter(outvar == "good"), aes(x = week, y = Estimate))+
+  geom_errorbar(aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .1) +
+  geom_vline(xintercept = 0)+
+  geom_hline(yintercept = 0) +
+  geom_point()
+
+bplt_6 <- ggplot(res3%>%filter(outvar == "good"), aes(x = week, y = Estimate))+
+  geom_vline(xintercept = 0, alpha = 0.5)+
+  geom_hline(yintercept = 0, alpha = 0.5)+
+  theme_minimal()+
+  geom_errorbar(aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .3) +
+  geom_point()+
+  geom_point(data = res3%>%filter(outvar == "good", p < 0.05),color = "#EEC600", size = 2 )+
+  geom_errorbar(data = res3%>%filter(outvar == "good", p < 0.05), aes(ymin = Estimate - MoE, ymax = Estimate + MoE), width = .5, color = "#EEC600") +
+  scale_y_continuous(breaks = seq(-0.08, 0.1, 0.02), limits = c(-0.08, 0.1))+
+  scale_x_continuous(breaks = seq(-5, 25, 5), limits = c(-5, 26))+
+  labs(x ="week", y = "log liter")+
+  ggtitle("Good Review: AoM yearly test")
+#bplt_6
+
+figure3B <- ggarrange(bplt_5, bplt_6, nrow = 1, ncol = 2)
+#ggsave("Fig3B.png", plot = figure3B, width = 8, height = 4)
+
+#figure3B
+annotate_figure(figure3B, top = text_grob("Figure 5 - Effects on Demand for Wine by Media", face = "bold", just = "right", size = 10))
+
+```
+
+Friberg and Grönqvist decide to run additional specifications of the regression equations to include interaction terms, the goal being to understand differential effects for different types of wines or review characteristics. Though they include several interaction effects in their paper, I focus on those effects in which the authors report significant results plus two I’ve introduced to the analysis. The new specification is identical to the first with the addition of terms for the category of interest interacted with each of the three review dummy variables and lagged over 10 weeks following the review:
+$$\ln Q_{ijkt} = \alpha_j + \delta_{kt} + \sum_m\sum_{l=-4}^{25}\alpha_{t-l}^mR_{it-l}^m + \sum_m\sum_{l=0}^{10}D_g\alpha_{t-l}^{m}R_{it-l}^{m}  + \sum_{l=-4}^{25}\gamma_{t-l}ADVERT_{it-l} + \vartheta_{ijkt}$$
+
+Note the new super index $m$ = good review, bad review, and review and $D_g$ is a dummy variable for the category of interest. The results of each specification is described in Table 4 where the first three columns are specifications from Friberg and Grönqvist (2012) and the remaining two are those I’ve introduced. 
+
+
+##### Table 4
+```{r Table 3 (4), message=FALSE, warning=FALSE, results="asis"}
+wine_data <- wine_data%>%
+  arrange(wine_ID, period)
+
+#Medium and high price
+wine_data$medhigh <- 0
+wine_data$medhigh[(wine_data$price_segm=="m"|wine_data$price_segm=="h")]<- 1
+
+#new world
+wine_data$newworld <- 0
+countrylist <- c("Argentina", "Australien", "Chile", "Nya Zeeland", "Portugal", "Sydafrika", "USA", "Uruguay")
+for (i in countrylist){
+  wine_data$newworld[wine_data$country == i] <- 1
+}
+wine_data$newworld[wine_data$newworld == 0] <- NA
+
+#Luxury wine - I define this as being a wine with a price in the 20% of the sample
+wine_data$luxury <- 0
+wine_data$luxury[wine_data$price > quantile(wine_data$price, .8, na.rm = TRUE)] <-1
+
+#bag-in-box
+wine_data$box <- 0
+wine_data$box[wine_data$price_segm=="b"] <- 1
+
+
+#Tabloids
+wine_data <- wine_data%>%
+  arrange(wine_ID, period)
+
+wine_data$rev_all_tabloid <- 0
+wine_data$rev_all_hi_tabloid <- 0
+wine_data$rev_all_lo_tabloid <- 0
+
+for (i in 0:10){
+wine_data$rev_all_tabloid[lag(wine_data$rev_eve, i) == 1] <- 1
+wine_data$rev_all_hi_tabloid[lag(wine_data$rev_eve_hi, i) == 1] <- 1
+wine_data$rev_all_lo_tabloid[lag(wine_data$rev_eve_lo, i) == 1] <- 1
+}
+
+#Medium/High Price
+wine_data <- wine_data%>%
+  arrange(wine_ID, period)
+
+wine_data$rev_all_medhigh <- 0
+wine_data$rev_all_hi_medhigh <- 0
+wine_data$rev_all_lo_medhigh <- 0
+
+for (i in 0:10){
+  wine_data$rev_all_medhigh[wine_data$medhigh == 1 & lag(wine_data$rev_all, i) == 1] <- 1
+  wine_data$rev_all_hi_medhigh[wine_data$medhigh == 1 & lag(wine_data$rev_all_hi, i) == 1] <- 1
+  wine_data$rev_all_lo_medhigh[wine_data$medhigh == 1 & lag(wine_data$rev_all_lo, i) == 1] <- 1
+}
+
+#Luxury wine
+wine_data <- wine_data%>%
+  arrange(wine_ID, period)
+
+wine_data$rev_all_luxury <- 0
+wine_data$rev_all_hi_luxury <- 0
+wine_data$rev_all_lo_luxury <- 0
+
+for (i in 0:10){
+  wine_data$rev_all_luxury[wine_data$luxury == 1 & lag(wine_data$rev_all, i) == 1] <- 1
+  wine_data$rev_all_hi_luxury[wine_data$luxury == 1 & lag(wine_data$rev_all_hi, i) == 1] <- 1
+  wine_data$rev_all_lo_luxury[wine_data$luxury == 1 & lag(wine_data$rev_all_lo, i) == 1] <- 1
+}
+
+#New world
+wine_data <- wine_data%>%
+  arrange(wine_ID, period)
+
+wine_data$rev_all_newworld <- 0
+wine_data$rev_all_hi_newworld <- 0
+wine_data$rev_all_lo_newworld <- 0
+
+for (i in 0:10){
+  wine_data$rev_all_newworld[wine_data$newworld == 1 & lag(wine_data$rev_all, i) == 1] <- 1
+  wine_data$rev_all_hi_newworld[wine_data$newworld == 1 & lag(wine_data$rev_all_hi, i) == 1] <- 1
+  wine_data$rev_all_lo_newworld[wine_data$newworld == 1 & lag(wine_data$rev_all_lo, i) == 1] <- 1
+}
+
+#Bag-in-Box
+wine_data <- wine_data%>%
+  arrange(wine_ID, period)
+
+wine_data$rev_all_box <- 0
+wine_data$rev_all_hi_box <- 0
+wine_data$rev_all_lo_box <- 0
+
+for (i in 0:10){
+  wine_data$rev_all_box[wine_data$box == 1 & lag(wine_data$rev_all, i) == 1] <- 1
+  wine_data$rev_all_hi_box[wine_data$box == 1 & lag(wine_data$rev_all_hi, i) == 1] <- 1
+  wine_data$rev_all_lo_box[wine_data$box == 1 & lag(wine_data$rev_all_lo, i) == 1] <- 1
+}
+
+
+wine_data<- wine_data%>%
+  arrange(wine_ID, period)
+
+#Medium/High Price Regression
+form_medhigh <- as.formula(paste(paste("llitre~rev_all_medhigh+rev_all_hi_medhigh+rev_all_lo_medhigh+", paste(varlist, collapse= "+")), "|artikpr+time_segm_price|0|brand_ID"))
+reg_medhigh<- felm(form_medhigh, data = wine_data, subset = (!is.na(dist) & dist > 4 & !is.na(rev_all_f_1) & !is.na(rev_all_f_2) & !is.na(rev_all_f_3) & !is.na(rev_all_f_4)), cmethod = "reghdfe")
+# stargazer(reg_medhigh, type = 'text')
+
+#Tabloid regression
+form_tabloid <- as.formula(paste(paste("llitre~rev_all_tabloid+rev_all_hi_tabloid+rev_all_lo_tabloid+", paste(varlist, collapse= "+")), "|artikpr+time_segm_price|0|brand_ID"))
+reg_tabloid <- felm(form_tabloid, data = wine_data, subset = (!is.na(dist) & dist > 4 & !is.na(rev_all_f_1) & !is.na(rev_all_f_2) & !is.na(rev_all_f_3) & !is.na(rev_all_f_4)), cmethod = "reghdfe")
+#stargazer(reg_tabloid, type = 'text')
+
+#New World Regression
+form_newworld <- as.formula(paste(paste("llitre~rev_all_newworld +rev_all_hi_newworld +rev_all_lo_newworld +", paste(varlist, collapse= "+")), "|artikpr+time_segm_price|0|brand_ID"))
+reg_newworld <- felm(form_newworld , data = wine_data, subset = (!is.na(dist) & dist > 4 & !is.na(rev_all_f_1) & !is.na(rev_all_f_2) & !is.na(rev_all_f_3) & !is.na(rev_all_f_4)), cmethod = "reghdfe")
+# stargazer(reg_newworld , type = 'text')
+
+#Luxury Regression
+form_luxury <- as.formula(paste(paste("llitre~rev_all_luxury +rev_all_hi_luxury + rev_all_lo_luxury +", paste(varlist, collapse= "+")), "|artikpr+time_segm_price|0|brand_ID"))
+reg_luxury<- felm(form_luxury, data = wine_data, subset = (!is.na(dist) & dist > 4 & !is.na(rev_all_f_1) & !is.na(rev_all_f_2) & !is.na(rev_all_f_3) & !is.na(rev_all_f_4)), cmethod = "reghdfe")
+#stargazer(reg_luxury, type = 'text')
+
+#Bag-in-Box Regression
+form_box <- as.formula(paste(paste("llitre~rev_all_box +rev_all_hi_box +rev_all_lo_box +", paste(varlist, collapse= "+")), "|artikpr+time_segm_price|0|brand_ID"))
+reg_box <- felm(form_box , data = wine_data, subset = (!is.na(dist) & dist > 4 & !is.na(rev_all_f_1) & !is.na(rev_all_f_2) & !is.na(rev_all_f_3) & !is.na(rev_all_f_4)), cmethod = "reghdfe")
+#stargazer(reg_box , type = 'text')
+
+
+stargazer(reg_medhigh, reg_tabloid, reg_newworld,reg_luxury, reg_box, type = 'html', digits = 4, keep = c(1:15), dep.var.caption = "", dep.var.labels = "", covariate.labels = c("Review*Medium/High Price", "Good Review*Medium/High Price", "Bad Review*Medium/High Price", "Review*Tabloid", "Good Review*Tabloid", "Bad Review*Tabloid", "Review*New World", "Good Review*New World", "Bad Review*New World", "Review*Luxury", "Good Review*Luxury", "Bad Review*Luxury", "Review*Box", "Good Review*Box", "Bad Review*Box"),title = "Differential Impact of Reviews on the Demand for Wine", out = "Table3.htm")
+
+```
+
+\n
+The first column reports differential effects for wines categorized as having a medium or high price. Wines in this category have a price (at the time of the sample) of at least SEK 75 per bottle which is about USD \$14.40 today (or about $10.20 at the time of the sample). We find a significant increase in the effect of a good review for mid to high priced wines. The authors explain this as evidence that a quality signal is more important for higher price levels. An expensive bottle of wine that received a good review might be more appealing to the consumer, or rather to the consumer’s friends he is trying to impress. 
+
+In column 2, I present different results from Friberg and Grönqvist. Their results show that the effect of receiving a good review is tainted by it being published in a tabloid magazine. Consistent with reviews having a “prestigious” effect, tabloid reviews might not be taken as seriously as others. However, in my estimation, I see a positive effect of a bad review published in a tabloid. Perhaps one way to rationalize this that a bad review being published in a tabloid has less of an detrimental impact on sales because a review from a tabloid could be perceived as a lower quality signal of true quality of the wine. Since the review came from a tabloid, the bad review might be less detering to the consumer than a bad review in the morning press. This is the one major estimation where my findings are largely different from the ones in the paper. If I use the data set extracted from the regression the authors perform, my estimates reflect the estimates in the paper. Though I have carefully tried to clean the original data set, it seems that I have observations which are biasing my results. 
+
+The third column is testing if wines from the Americas, South Africa, and Australia/New Zealand might have differential effects from reviews who do much more to market their brand than European producers. We find that the effect of a new world wine receiving a review is diluted which Friberg and Grönqvist interpret as the informative nature of the review being diluted. Since the new world brands are more well-known, having a review has a lesser effect on saliency.
+
+The last two columns are my own ideas for interaction effects. The fourth column is an extension of column 1 in that I test for a different effect for wines priced in the top 20th percentile of the sample. The authors attributed the effects for the medium- and high-price wines as evidence for the prestigious quality of a review. We might expect extremely high priced wines or luxury wines as having a similar effect. However, in column 4, we see that the effect of receiving a review is decreased for luxury wines. Similar to the new world wines, it is possible that these particular wines are more well-known either because the remarkably high price point is in and of itself a signal of quality/prestige or the consumers for these luxury wines are more knowledgeable by virtue of their socioeconomic status. Therefore, the informative nature of the reviews is less impactful. Additionally, it could be the case that reviews are necessary to signal quality to an otherwise unknowing consumer, but that these consumers look for reviews from higher quality reviewers. We saw how bad reviews in tabloids were less detrimental (Friberg and Gronqvist find that good reviews in tabloids were less beneficial); perhaps those in the market for luxury wines are interested in signals from prestigious wine connoisseurs. The last column tests the differential effect of reviews for wines sold in bag-in-box packages. If a consumer sees a review for a wine she is unfamiliar with, it is unlikely that she will buy a three-liter box to try it if there is a 750 mL bottle also available. Moreover, it could be possible that reviews indirectly increase sales of box wines by increasing sales of the 750 mL versions. In column 5, we see that the effect of receiving a review is decreased for box wines. Again, the informative quality of the review is less impactful on box wine sales because it is likely a consumer would try the smaller bottle first before buying the box. Since this effect is likely not simultaneous for every consumer and buying a 750 mL is not necessarily indicative of buying the 3-L box, we cannot see this effect in our regressions. This would be an interesting mechanism to study in subsequent research.
+
+## Conclusions
+
+Overall, Friberg and Grönqvist find convincing evidence for expert reviews having a casual effect on wine sales in Sweden. An expert review acts as a signal of quality to the consumer and aids in guiding them through a market with an overwhelming number of choices. Receiving a review, regardless if it is good, bad or indifferent, is found to increase sales for that wine. The effect of a favorable review is even better for sales of that wine whereas the effect of an unfavorable review is as if the wine never received a review at all. It seems that reviews serve as a way of educating the consumer on their choice set and also providing added utility to those interested in the prestige of a positive review.
+	In addition to overall effects on sales, the authors and I look at various heterogeneous effects on reviews for wines in different price levels, package varieties, from different countries and if the review was published in tabloids as opposed to the morning press. The statistically significant effects can be explained by the informative and prestige qualities of expert reviews in this market.
+	It is difficult to say whether these effects will extend into other markets due to the unique environment in Sweden. For example, in the U.S., states have differing laws for distributing alcohol, particularly wine and spirits. For example, Pennsylvania does have a state-owned retailer, “Fine Wine and Good Spirits,” but they do engage in sales promotion behavior unlike Systembolaget. Also, advertising in the U.S. is far more persuasive than informative and brands invest a lot more of their revenue into advertising. So although we find strong effects in the Swedish market, there are several factors that make it incomparable to the American market. However, we can use this analysis as a baseline for investigations into what factors might help differentiate wine or similar “experience goods” from an otherwise overwhelming market. 
+
+## References:
+
+Friberg, Richard, and Erik Grönqvist. 2012. "Do Expert Reviews Affect the Demand for Wine?" American Economic Journal: Applied Economics, 4 (1): 193-211.
+
+Lacetera, Nicola, Devin G. Pope, and Justin R. Sydnor. 2012. "Heuristic Thinking and Limited Attention in the Car Market." American Economic Review, 102 (5): 2206-36.
+
+https://en.wikipedia.org/wiki/Alcohol_laws_of_Pennsylvania#Retail_liquor
+
+
